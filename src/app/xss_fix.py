@@ -1,6 +1,5 @@
 import html
 import re
-from typing import Optional
 
 
 class CommentService:
@@ -15,7 +14,7 @@ class CommentService:
         return sanitized
 
     @staticmethod
-    def validate_comment(comment: str, max_length: int = 1000) -> tuple[bool, Optional[str]]:
+    def validate_comment(comment: str, max_length: int = 1000) -> tuple[bool, str | None]:
         if not comment or not isinstance(comment, str):
             return False, "Comment must be a non-empty string"
 

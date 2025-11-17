@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 
 class FileService:
@@ -22,18 +21,18 @@ class FileService:
         try:
             resolved_path.relative_to(self.base_dir)
         except ValueError:
-            raise ValueError(f"Path traversal detected: {file_path}")
+            raise ValueError(f"Path traversal detected: {file_path}") from None
 
         return resolved_path
 
-    def read_file(self, file_path: str) -> Optional[str]:
+    def read_file(self, file_path: str) -> str | None:
         try:
             safe_path = self._validate_path(file_path)
             if not safe_path.exists() or not safe_path.is_file():
                 return None
             return safe_path.read_text(encoding="utf-8")
         except (ValueError, OSError) as e:
-            raise ValueError(f"Invalid file path: {e}")
+            raise ValueError(f"Invalid file path: {e}") from e
 
     def file_exists(self, file_path: str) -> bool:
         try:

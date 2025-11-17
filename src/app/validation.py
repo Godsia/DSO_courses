@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 
 class InputValidator:
@@ -7,7 +6,7 @@ class InputValidator:
     @staticmethod
     def validate_username(
         username: str, min_length: int = 3, max_length: int = 50
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         if not username or not isinstance(username, str):
             return False, "Username must be a non-empty string"
 
@@ -23,7 +22,7 @@ class InputValidator:
         return True, None
 
     @staticmethod
-    def validate_email(email: str) -> tuple[bool, Optional[str]]:
+    def validate_email(email: str) -> tuple[bool, str | None]:
         if not email or not isinstance(email, str):
             return False, "Email must be a non-empty string"
 
@@ -39,7 +38,7 @@ class InputValidator:
     @staticmethod
     def validate_string_length(
         text: str, min_length: int = 1, max_length: int = 1000, field_name: str = "Field"
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         if not isinstance(text, str):
             return False, f"{field_name} must be a string"
 

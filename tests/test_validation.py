@@ -1,4 +1,3 @@
-import pytest
 
 from src.app.validation import InputValidator
 

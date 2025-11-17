@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Optional
 
 from src.app.logger import SecureLogger
 from src.app.validation import InputValidator
@@ -26,7 +25,7 @@ class UserService:
         )
         self.conn.commit()
 
-    def get_user_by_username(self, username: str) -> Optional[dict]:
+    def get_user_by_username(self, username: str) -> dict | None:
         is_valid, error_msg = self.validator.validate_username(username)
         if not is_valid:
             self.logger.warning(f"Invalid username attempt: {error_msg}")
@@ -62,7 +61,7 @@ class UserService:
             self.logger.info("User created successfully")
             return {"id": cursor.lastrowid, "username": username, "email": email}
         except sqlite3.IntegrityError as e:
-            self.logger.error(f"Failed to create user: integrity error")
+            self.logger.error("Failed to create user: integrity error")
             raise ValueError(f"User with username '{username}' already exists") from e
 
     def close(self):
