@@ -31,12 +31,12 @@ class UserService:
         if not is_valid:
             self.logger.warning(f"Invalid username attempt: {error_msg}")
             raise ValueError(error_msg or "Invalid username")
-        
+
         self.logger.info(f"Attempting to retrieve user: {username}")
         cursor = self.conn.cursor()
         cursor.execute("SELECT id, username, email FROM users WHERE username = ?", (username,))
         row = cursor.fetchone()
-        
+
         if row:
             self.logger.info("User retrieved successfully")
             return {"id": row[0], "username": row[1], "email": row[2]}
@@ -48,19 +48,16 @@ class UserService:
         if not is_valid:
             self.logger.warning(f"Invalid username in create_user: {error_msg}")
             raise ValueError(error_msg or "Invalid username")
-        
+
         is_valid, error_msg = self.validator.validate_email(email)
         if not is_valid:
             self.logger.warning(f"Invalid email in create_user: {error_msg}")
             raise ValueError(error_msg or "Invalid email")
-        
+
         self.logger.info(f"Attempting to create user: {username}")
         cursor = self.conn.cursor()
         try:
-            cursor.execute(
-                "INSERT INTO users (username, email) VALUES (?, ?)",
-                (username, email)
-            )
+            cursor.execute("INSERT INTO users (username, email) VALUES (?, ?)", (username, email))
             self.conn.commit()
             self.logger.info("User created successfully")
             return {"id": cursor.lastrowid, "username": username, "email": email}

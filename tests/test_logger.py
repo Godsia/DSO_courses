@@ -11,7 +11,7 @@ class TestSecureLogger:
         self.stream = StringIO()
         handler = logging.StreamHandler(self.stream)
         handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(levelname)s - %(message)s')
+        formatter = logging.Formatter("%(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.logger.addHandler(handler)
 

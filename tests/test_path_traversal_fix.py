@@ -11,13 +11,14 @@ class TestPathTraversalFix:
     def setup_method(self):
         self.temp_dir = tempfile.mkdtemp()
         self.service = FileService(self.temp_dir)
-        
+
         (Path(self.temp_dir) / "test.txt").write_text("test content")
         (Path(self.temp_dir) / "subdir").mkdir()
         (Path(self.temp_dir) / "subdir" / "nested.txt").write_text("nested content")
 
     def teardown_method(self):
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
     def test_read_file_positive(self):

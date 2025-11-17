@@ -15,7 +15,7 @@ class TestSQLInjectionFix:
         user = self.service.create_user("testuser", "test@example.com")
         assert user["username"] == "testuser"
         assert user["email"] == "test@example.com"
-        
+
         retrieved = self.service.get_user_by_username("testuser")
         assert retrieved is not None
         assert retrieved["username"] == "testuser"
