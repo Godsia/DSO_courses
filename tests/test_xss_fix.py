@@ -34,11 +34,11 @@ class TestXSSFix:
 
     def test_sql_injection_in_comment_negative(self):
         comment = self.service.create_comment("user", "admin' OR '1'='1")
-        assert "'" in comment["comment"]
+        assert "&#x27;" in comment["comment"] or "&apos;" in comment["comment"]
         assert "OR" in comment["comment"]
 
     def test_empty_comment_negative(self):
-        with pytest.raises(ValueError, match="Comment cannot be empty"):
+        with pytest.raises(ValueError, match="Comment must be a non-empty string"):
             self.service.create_comment("user", "")
 
     def test_whitespace_only_comment_negative(self):

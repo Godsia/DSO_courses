@@ -22,18 +22,18 @@ class TestSQLInjectionFix:
 
     def test_sql_injection_attempt_negative(self):
         malicious_input = "admin' OR '1'='1"
-        result = self.service.get_user_by_username(malicious_input)
-        assert result is None
+        with pytest.raises(ValueError, match="Username can only contain"):
+            self.service.get_user_by_username(malicious_input)
 
     def test_sql_injection_union_negative(self):
         malicious_input = "admin' UNION SELECT * FROM users--"
-        result = self.service.get_user_by_username(malicious_input)
-        assert result is None
+        with pytest.raises(ValueError, match="Username can only contain"):
+            self.service.get_user_by_username(malicious_input)
 
     def test_sql_injection_comment_negative(self):
         malicious_input = "admin'--"
-        result = self.service.get_user_by_username(malicious_input)
-        assert result is None
+        with pytest.raises(ValueError, match="Username can only contain"):
+            self.service.get_user_by_username(malicious_input)
 
     def test_empty_username_negative(self):
         with pytest.raises(ValueError, match="Username must be a non-empty string"):

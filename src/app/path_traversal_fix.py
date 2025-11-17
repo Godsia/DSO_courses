@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import unquote
 
 
 class FileService:
@@ -13,6 +14,14 @@ class FileService:
     def _validate_path(self, file_path: str) -> Path:
         if not file_path or not isinstance(file_path, str):
             raise ValueError("File path must be a non-empty string")
+
+        if file_path.startswith("/"):
+            raise ValueError(f"Path traversal detected: {file_path}")
+
+        file_path = unquote(file_path)
+
+        if ".." in file_path:
+            raise ValueError(f"Path traversal detected: {file_path}")
 
         file_path = file_path.lstrip("/")
 
