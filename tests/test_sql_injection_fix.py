@@ -1,4 +1,5 @@
 import pytest
+
 from src.app.sql_injection_fix import UserService
 
 
