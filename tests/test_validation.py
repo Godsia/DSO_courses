@@ -1,4 +1,3 @@
-
 from src.app.validation import InputValidator
 
 
