@@ -2,7 +2,7 @@ FROM python:3.11-slim as builder
 
 WORKDIR /build
 
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade "pip>=24.0,<25.0" && \
     pip install --no-cache-dir --user Flask==3.0.0
 
 FROM python:3.11-slim
