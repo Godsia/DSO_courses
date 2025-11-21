@@ -27,8 +27,15 @@ jobs:
       - name: Tag image for Trivy
         run: |
           docker compose build
-          IMAGE_ID=$(docker compose images -q app)
-          docker tag $IMAGE_ID secure-app:latest
+          IMAGE_ID=$(docker compose images app -q)
+          if [ -z "$IMAGE_ID" ]; then
+            IMAGE_ID=$(docker images --format "{{.ID}}" --filter "reference=dso_courses-app" | head -1)
+          fi
+          if [ -n "$IMAGE_ID" ]; then
+            docker tag $IMAGE_ID secure-app:latest
+          else
+            echo "Warning: Could not find image ID, skipping tag"
+          fi
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
