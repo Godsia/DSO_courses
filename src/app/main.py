@@ -14,4 +14,3 @@ def multiply(a: int, b: int) -> int:
 def greet(name: str) -> str:
     """Greet a person."""
     return f"Hello, {name}!"
-

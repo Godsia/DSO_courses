@@ -29,4 +29,3 @@ def test_greet():
 def test_add_parametrized(a, b, expected):
     """Parametrized test for add."""
     assert add(a, b) == expected
-
