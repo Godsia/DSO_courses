@@ -1,0 +1,99 @@
+name: Security - SBOM & SCA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "requirements*.txt"
+      - "*.py"
+      - ".github/workflows/ci-sbom-sca.yml"
+  pull_request:
+    paths:
+      - "requirements*.txt"
+      - "*.py"
+      - ".github/workflows/ci-sbom-sca.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom-sca:
+    name: Generate SBOM & SCA Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create evidence directory
+        run: mkdir -p EVIDENCE/P09
+
+      - name: Generate SBOM with Syft
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            anchore/syft:latest \
+            packages dir:. -o cyclonedx-json > EVIDENCE/P09/sbom.json
+
+      - name: Run SCA scan with Grype
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            anchore/grype:latest \
+            sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json || true
+
+      - name: Generate SCA summary
+        run: |
+          python3 << EOF
+          import json
+          import os
+          from datetime import datetime
+          
+          summary_file = "EVIDENCE/P09/sca_summary.md"
+          commit_sha = os.environ.get("GITHUB_SHA", "unknown")
+          
+          try:
+              with open("EVIDENCE/P09/sca_report.json", "r") as f:
+                  data = json.load(f)
+              
+              matches = data.get("matches", [])
+              
+              critical = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Critical")
+              high = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "High")
+              medium = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Medium")
+              low = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Low")
+              
+              with open(summary_file, "w") as f:
+                  f.write("# SCA Vulnerability Summary\n\n")
+                  f.write(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+                  f.write(f"Commit: {commit_sha}\n\n")
+                  f.write("## Severity Distribution\n\n")
+                  f.write(f"- **Critical:** {critical}\n")
+                  f.write(f"- **High:** {high}\n")
+                  f.write(f"- **Medium:** {medium}\n")
+                  f.write(f"- **Low:** {low}\n\n")
+                  f.write("## Notes\n\n")
+                  f.write("See policy/waivers.yml for exceptions and planned fixes.\n")
+          except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+              with open(summary_file, "w") as f:
+                  f.write("# SCA Summary\n\n")
+                  f.write(f"No vulnerabilities found or report generation failed.\n")
+                  f.write(f"Error: {str(e)}\n")
+          EOF
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-sca-evidence
+          path: |
+            EVIDENCE/P09/*
+          retention-days: 30
+
