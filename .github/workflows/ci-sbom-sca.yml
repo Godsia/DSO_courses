@@ -49,45 +49,40 @@ jobs:
 
       - name: Generate SCA summary
         run: |
-          if [ -f EVIDENCE/P09/sca_report.json ]; then
-            echo "# SCA Vulnerability Summary" > EVIDENCE/P09/sca_summary.md
-            echo "" >> EVIDENCE/P09/sca_summary.md
-            echo "Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> EVIDENCE/P09/sca_summary.md
-            echo "Commit: ${{ github.sha }}" >> EVIDENCE/P09/sca_summary.md
-            echo "" >> EVIDENCE/P09/sca_summary.md
-            
-            docker run --rm -v ${{ github.workspace }}:/work -w /work alpine/jq:latest \
-              '[.matches[] | select(.vulnerability.severity == "Critical")] | length' \
-              EVIDENCE/P09/sca_report.json > /tmp/critical.txt 2>/dev/null || echo "0" > /tmp/critical.txt
-            docker run --rm -v ${{ github.workspace }}:/work -w /work alpine/jq:latest \
-              '[.matches[] | select(.vulnerability.severity == "High")] | length' \
-              EVIDENCE/P09/sca_report.json > /tmp/high.txt 2>/dev/null || echo "0" > /tmp/high.txt
-            docker run --rm -v ${{ github.workspace }}:/work -w /work alpine/jq:latest \
-              '[.matches[] | select(.vulnerability.severity == "Medium")] | length' \
-              EVIDENCE/P09/sca_report.json > /tmp/medium.txt 2>/dev/null || echo "0" > /tmp/medium.txt
-            docker run --rm -v ${{ github.workspace }}:/work -w /work alpine/jq:latest \
-              '[.matches[] | select(.vulnerability.severity == "Low")] | length' \
-              EVIDENCE/P09/sca_report.json > /tmp/low.txt 2>/dev/null || echo "0" > /tmp/low.txt
-            
-            CRITICAL=$(cat /tmp/critical.txt || echo "0")
-            HIGH=$(cat /tmp/high.txt || echo "0")
-            MEDIUM=$(cat /tmp/medium.txt || echo "0")
-            LOW=$(cat /tmp/low.txt || echo "0")
-            
-            echo "## Severity Distribution" >> EVIDENCE/P09/sca_summary.md
-            echo "" >> EVIDENCE/P09/sca_summary.md
-            echo "- **Critical:** $CRITICAL" >> EVIDENCE/P09/sca_summary.md
-            echo "- **High:** $HIGH" >> EVIDENCE/P09/sca_summary.md
-            echo "- **Medium:** $MEDIUM" >> EVIDENCE/P09/sca_summary.md
-            echo "- **Low:** $LOW" >> EVIDENCE/P09/sca_summary.md
-            echo "" >> EVIDENCE/P09/sca_summary.md
-            echo "## Notes" >> EVIDENCE/P09/sca_summary.md
-            echo "" >> EVIDENCE/P09/sca_summary.md
-            echo "See policy/waivers.yml for exceptions and planned fixes." >> EVIDENCE/P09/sca_summary.md
-          else
-            echo "# SCA Summary" > EVIDENCE/P09/sca_summary.md
-            echo "No vulnerabilities found or report generation failed." >> EVIDENCE/P09/sca_summary.md
-          fi
+          python3 << 'EOF'
+          import json
+          from datetime import datetime
+          
+          summary_file = "EVIDENCE/P09/sca_summary.md"
+          
+          try:
+              with open("EVIDENCE/P09/sca_report.json", "r") as f:
+                  data = json.load(f)
+              
+              matches = data.get("matches", [])
+              
+              critical = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Critical")
+              high = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "High")
+              medium = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Medium")
+              low = sum(1 for m in matches if m.get("vulnerability", {}).get("severity") == "Low")
+              
+              with open(summary_file, "w") as f:
+                  f.write("# SCA Vulnerability Summary\n\n")
+                  f.write(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+                  f.write(f"Commit: ${{ github.sha }}\n\n")
+                  f.write("## Severity Distribution\n\n")
+                  f.write(f"- **Critical:** {critical}\n")
+                  f.write(f"- **High:** {high}\n")
+                  f.write(f"- **Medium:** {medium}\n")
+                  f.write(f"- **Low:** {low}\n\n")
+                  f.write("## Notes\n\n")
+                  f.write("See policy/waivers.yml for exceptions and planned fixes.\n")
+          except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+              with open(summary_file, "w") as f:
+                  f.write("# SCA Summary\n\n")
+                  f.write(f"No vulnerabilities found or report generation failed.\n")
+                  f.write(f"Error: {str(e)}\n")
+          EOF
 
       - name: Upload evidence artifacts
         uses: actions/upload-artifact@v4
