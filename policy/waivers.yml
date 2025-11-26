@@ -1,0 +1,11 @@
+waivers:
+  - id: "example-waiver-1"
+    package: "example-package"
+    vulnerability: "CVE-YYYY-XXXXX"
+    severity: "High"
+    reason: "Example waiver - replace with actual waiver"
+    issue: "https://github.com/org/repo/issues/123"
+    expires: "2025-12-31"
+    reviewed_by: "team-lead"
+    notes: "Planned fix in Q1 2026"
+
