@@ -1,0 +1,108 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, p08-cicd-minimal]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ruff
+        run: ruff check src/ tests/
+        continue-on-error: false
+
+      - name: Run black check
+        run: black --check src/ tests/
+        continue-on-error: false
+
+      - name: Run isort check
+        run: isort --check-only src/ tests/
+        continue-on-error: false
+
+      - name: Run pytest
+        run: pytest -q
+        continue-on-error: false
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            reports/
+          retention-days: 7
+
+  deploy:
+    name: Deploy (Staging)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    environment:
+      name: staging
+      url: https://staging.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging (dry-run)
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "Environment: ${{ env.STAGING_ENV }}"
+          echo "Version: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "✅ Deployment simulation completed successfully"
+        env:
+          STAGING_ENV: ${{ secrets.STAGING_ENV || 'staging-default' }}
+
+      - name: Create deployment artifact
+        run: |
+          mkdir -p artifacts
+          echo "Deployment successful" > artifacts/deploy.log
+          echo "${{ github.sha }}" > artifacts/version.txt
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: artifacts/
+          retention-days: 30
+
