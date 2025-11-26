@@ -49,11 +49,13 @@ jobs:
 
       - name: Generate SCA summary
         run: |
-          python3 << 'EOF'
+          python3 << EOF
           import json
+          import os
           from datetime import datetime
           
           summary_file = "EVIDENCE/P09/sca_summary.md"
+          commit_sha = os.environ.get("GITHUB_SHA", "unknown")
           
           try:
               with open("EVIDENCE/P09/sca_report.json", "r") as f:
@@ -69,7 +71,7 @@ jobs:
               with open(summary_file, "w") as f:
                   f.write("# SCA Vulnerability Summary\n\n")
                   f.write(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-                  f.write(f"Commit: ${{ github.sha }}\n\n")
+                  f.write(f"Commit: {commit_sha}\n\n")
                   f.write("## Severity Distribution\n\n")
                   f.write(f"- **Critical:** {critical}\n")
                   f.write(f"- **High:** {high}\n")
@@ -83,6 +85,8 @@ jobs:
                   f.write(f"No vulnerabilities found or report generation failed.\n")
                   f.write(f"Error: {str(e)}\n")
           EOF
+        env:
+          GITHUB_SHA: ${{ github.sha }}
 
       - name: Upload evidence artifacts
         uses: actions/upload-artifact@v4
