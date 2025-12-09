@@ -1,0 +1,26 @@
+rules:
+  - id: python-hardcoded-secrets
+    message: Potential hardcoded secret detected
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: password\s*=\s*["']...
+          - pattern: api_key\s*=\s*["']...
+          - pattern: secret\s*=\s*["']...
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: python-unsafe-eval
+    message: Use of eval() can be dangerous
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: eval(...)
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+
