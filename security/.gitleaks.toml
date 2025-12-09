@@ -1,0 +1,16 @@
+# Gitleaks configuration for secrets scanning
+title = "DSO Courses Secrets Detection"
+
+# Allowlist patterns for false positives
+[allowlist]
+description = "Allowlist for known false positives"
+paths = [
+  '''\.git/''',
+  '''EVIDENCE/''',
+  '''\.github/workflows/.*\.yml''',
+  '''security/\.gitleaks\.toml''',
+]
+
+# Rules can be customized here
+# By default, Gitleaks uses built-in rules for common secrets
+
