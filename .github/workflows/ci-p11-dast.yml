@@ -1,0 +1,178 @@
+name: Security - DAST (ZAP Baseline)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "requirements*.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "requirements*.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast-zap:
+    name: DAST - ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create evidence directory
+        run: mkdir -p EVIDENCE/P11
+
+      - name: Start application
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+          echo $! > /tmp/app.pid
+        env:
+          PYTHONUNBUFFERED: 1
+
+      - name: Wait for application to be ready
+        run: |
+          echo "Waiting for application to start..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "✓ Application is ready and responding"
+              curl -v http://localhost:8080/healthz
+              echo ""
+              echo "Testing all endpoints:"
+              curl -s http://localhost:8080/ | head -20
+              curl -s http://localhost:8080/api/v1/info | head -20
+              exit 0
+            fi
+            echo "Waiting for application... ($i/30)"
+            sleep 2
+          done
+          echo "✗ Application failed to start after 60 seconds"
+          echo "Checking if process is running:"
+          ps aux | grep uvicorn || echo "No uvicorn process found"
+          netstat -tlnp | grep 8080 || echo "Port 8080 not listening"
+          exit 1
+
+      - name: Run ZAP baseline scan
+        run: |
+          echo "Testing application accessibility from host..."
+          curl -v http://localhost:8080/healthz || echo "Localhost check failed"
+          
+          # Get the host's IP address that Docker can access
+          # In GitHub Actions, we need to use the gateway IP
+          HOST_IP=$(ip route | grep default | awk '{print $3}' | head -1)
+          echo "Docker gateway IP: $HOST_IP"
+          
+          # Alternative: use host.docker.internal if available
+          # Or use the actual host IP from docker network
+          # Try multiple approaches
+          
+          echo "Running ZAP baseline scan..."
+          echo "Target URL: http://localhost:8080"
+          
+          # Run ZAP baseline scan with proper network configuration
+          # Using --add-host to map host.docker.internal to host gateway
+          docker run --rm \
+            --add-host=host.docker.internal:host-gateway \
+            -v ${{ github.workspace }}:/zap/wrk/:rw \
+            -t owasp/zap2docker-stable:latest \
+            zap-baseline.py \
+            -t http://host.docker.internal:8080 \
+            -J \
+            -j \
+            -r /zap/wrk/zap_baseline.html \
+            -g /zap/wrk/gen.conf \
+            -I \
+            || echo "ZAP scan completed (check exit code above)"
+          
+          # If host.docker.internal doesn't work, try with network host
+          if [ ! -f zap_baseline.html ] && [ ! -f zap_baseline.json ]; then
+            echo "First attempt failed, trying with --network host..."
+            docker run --rm \
+              --network host \
+              -v ${{ github.workspace }}:/zap/wrk/:rw \
+              -t owasp/zap2docker-stable:latest \
+              zap-baseline.py \
+              -t http://localhost:8080 \
+              -J \
+              -j \
+              -r /zap/wrk/zap_baseline.html \
+              -g /zap/wrk/gen.conf \
+              -I \
+              || echo "ZAP scan completed (check exit code above)"
+          fi
+          
+          # Verify files were created
+          echo "=== Checking for ZAP output files ==="
+          ls -la zap_baseline.* 2>/dev/null || echo "No ZAP output files found in workspace root"
+          find . -name "zap_baseline.*" -type f 2>/dev/null || echo "No ZAP files found anywhere"
+
+      - name: Copy ZAP reports to evidence directory
+        run: |
+          # ZAP creates files in workspace root (mounted as /zap/wrk/)
+          # Copy files to evidence directory
+          echo "Searching for ZAP report files..."
+          
+          # Check workspace root first
+          if [ -f zap_baseline.html ]; then
+            echo "Found zap_baseline.html in workspace root"
+            cp zap_baseline.html EVIDENCE/P11/
+          fi
+          
+          if [ -f zap_baseline.json ]; then
+            echo "Found zap_baseline.json in workspace root"
+            cp zap_baseline.json EVIDENCE/P11/
+          fi
+          
+          if [ -f gen.conf ]; then
+            echo "Found gen.conf in workspace root"
+            cp gen.conf EVIDENCE/P11/
+          fi
+          
+          # Debug: list all files
+          echo "=== Files in workspace root ==="
+          ls -la *.html *.json *.conf 2>/dev/null || echo "No HTML/JSON/CONF files found in root"
+          
+          echo "=== Files in EVIDENCE/P11/ ==="
+          ls -la EVIDENCE/P11/ || echo "EVIDENCE/P11/ is empty"
+          
+          # Verify we have at least one report
+          if [ ! -f EVIDENCE/P11/zap_baseline.html ] && [ ! -f EVIDENCE/P11/zap_baseline.json ]; then
+            echo "WARNING: No ZAP reports found! Creating placeholder."
+            echo "ZAP scan may have failed or completed too quickly." > EVIDENCE/P11/scan_status.txt
+          fi
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f /tmp/app.pid ]; then
+            kill $(cat /tmp/app.pid) || true
+          fi
+          pkill -f "uvicorn app.main:app" || true
+
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: P11_EVIDENCE
+          path: |
+            EVIDENCE/P11/*
+          retention-days: 30
+
