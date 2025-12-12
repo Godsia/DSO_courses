@@ -1,0 +1,108 @@
+name: Security - DAST (ZAP Baseline)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "requirements*.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "requirements*.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast-zap:
+    name: DAST - ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create evidence directory
+        run: mkdir -p EVIDENCE/P11
+
+      - name: Start application
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+          echo $! > /tmp/app.pid
+        env:
+          PYTHONUNBUFFERED: 1
+
+      - name: Wait for application to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "Application is ready"
+              exit 0
+            fi
+            echo "Waiting for application... ($i/30)"
+            sleep 2
+          done
+          echo "Application failed to start"
+          exit 1
+
+      - name: Run ZAP baseline scan
+        run: |
+          docker run --rm \
+            --network host \
+            -v ${{ github.workspace }}:/zap/wrk/:rw \
+            -t owasp/zap2docker-stable:latest \
+            zap-baseline.py \
+            -t http://localhost:8080 \
+            -J \
+            -j \
+            -r /zap/wrk/zap_baseline.html \
+            -g /zap/wrk/gen.conf \
+            || true
+
+      - name: Copy ZAP reports to evidence directory
+        run: |
+          if [ -f zap_baseline.html ]; then
+            cp zap_baseline.html EVIDENCE/P11/ || true
+          fi
+          if [ -f zap_baseline.json ]; then
+            cp zap_baseline.json EVIDENCE/P11/ || true
+          fi
+          if [ -f gen.conf ]; then
+            cp gen.conf EVIDENCE/P11/ || true
+          fi
+          # Files are created in workspace root by ZAP
+          ls -la *.html *.json 2>/dev/null || true
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f /tmp/app.pid ]; then
+            kill $(cat /tmp/app.pid) || true
+          fi
+          pkill -f "uvicorn app.main:app" || true
+
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: P11_EVIDENCE
+          path: |
+            EVIDENCE/P11/*
+          retention-days: 30
+
