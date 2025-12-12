@@ -77,6 +77,8 @@ jobs:
 
       - name: Copy ZAP reports to evidence directory
         run: |
+          # ZAP creates files in /zap/wrk/ which is mounted as workspace
+          # Files should be in workspace root after ZAP run
           if [ -f zap_baseline.html ]; then
             cp zap_baseline.html EVIDENCE/P11/ || true
           fi
@@ -86,8 +88,11 @@ jobs:
           if [ -f gen.conf ]; then
             cp gen.conf EVIDENCE/P11/ || true
           fi
-          # Files are created in workspace root by ZAP
-          ls -la *.html *.json 2>/dev/null || true
+          # Debug: list files in workspace root
+          echo "Files in workspace root:"
+          ls -la *.html *.json 2>/dev/null || echo "No HTML/JSON files found in root"
+          echo "Files in EVIDENCE/P11/:"
+          ls -la EVIDENCE/P11/ || echo "EVIDENCE/P11/ is empty"
 
       - name: Stop application
         if: always()
