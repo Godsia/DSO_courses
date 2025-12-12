@@ -72,32 +72,57 @@ jobs:
 
       - name: Run ZAP baseline scan
         run: |
-          # Get host IP for Docker container access
-          HOST_IP=$(hostname -I | awk '{print $1}')
-          echo "Host IP: $HOST_IP"
-          echo "Testing application accessibility..."
+          echo "Testing application accessibility from host..."
           curl -v http://localhost:8080/healthz || echo "Localhost check failed"
           
-          # Run ZAP baseline scan
-          # Using --network host should work, but adding fallback
+          # Get the host's IP address that Docker can access
+          # In GitHub Actions, we need to use the gateway IP
+          HOST_IP=$(ip route | grep default | awk '{print $3}' | head -1)
+          echo "Docker gateway IP: $HOST_IP"
+          
+          # Alternative: use host.docker.internal if available
+          # Or use the actual host IP from docker network
+          # Try multiple approaches
+          
+          echo "Running ZAP baseline scan..."
+          echo "Target URL: http://localhost:8080"
+          
+          # Run ZAP baseline scan with proper network configuration
+          # Using --add-host to map host.docker.internal to host gateway
           docker run --rm \
-            --network host \
             --add-host=host.docker.internal:host-gateway \
             -v ${{ github.workspace }}:/zap/wrk/:rw \
             -t owasp/zap2docker-stable:latest \
             zap-baseline.py \
-            -t http://localhost:8080 \
+            -t http://host.docker.internal:8080 \
             -J \
             -j \
             -r /zap/wrk/zap_baseline.html \
             -g /zap/wrk/gen.conf \
             -I \
-            || echo "ZAP scan completed with warnings or errors"
+            || echo "ZAP scan completed (check exit code above)"
+          
+          # If host.docker.internal doesn't work, try with network host
+          if [ ! -f zap_baseline.html ] && [ ! -f zap_baseline.json ]; then
+            echo "First attempt failed, trying with --network host..."
+            docker run --rm \
+              --network host \
+              -v ${{ github.workspace }}:/zap/wrk/:rw \
+              -t owasp/zap2docker-stable:latest \
+              zap-baseline.py \
+              -t http://localhost:8080 \
+              -J \
+              -j \
+              -r /zap/wrk/zap_baseline.html \
+              -g /zap/wrk/gen.conf \
+              -I \
+              || echo "ZAP scan completed (check exit code above)"
+          fi
           
           # Verify files were created
-          echo "Checking for ZAP output files..."
-          ls -la /zap/wrk/*.html /zap/wrk/*.json 2>/dev/null || echo "No ZAP output files found in /zap/wrk/"
+          echo "=== Checking for ZAP output files ==="
           ls -la zap_baseline.* 2>/dev/null || echo "No ZAP output files found in workspace root"
+          find . -name "zap_baseline.*" -type f 2>/dev/null || echo "No ZAP files found anywhere"
 
       - name: Copy ZAP reports to evidence directory
         run: |
