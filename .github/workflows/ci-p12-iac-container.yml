@@ -71,6 +71,7 @@ jobs:
           ls -la iac/ || echo "iac/ directory not found"
           
           # Run Checkov with error handling
+          # Try with --output-file-path first, fallback to stdout redirection
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
@@ -81,7 +82,22 @@ jobs:
             --output json \
             --output-file-path /workspace/EVIDENCE/P12/ \
             --quiet \
-            2>&1 || echo "Checkov completed with warnings or errors"
+            2>&1 | tee /tmp/checkov_output.log || true
+          
+          # If output-file-path didn't work, try redirecting stdout
+          if [ ! -f EVIDENCE/P12/checkov_report.json ] && [ ! -f EVIDENCE/P12/checkov_report_*.json ]; then
+            echo "Trying alternative Checkov command with stdout redirection..."
+            docker run --rm \
+              -v ${{ github.workspace }}:/workspace \
+              -w /workspace \
+              bridgecrew/checkov:latest \
+              checkov \
+              --directory /workspace/iac \
+              --framework kubernetes \
+              --output json \
+              --quiet \
+              > EVIDENCE/P12/checkov_report.json 2>&1 || true
+          fi
           
           echo "Checkov scan completed"
           
