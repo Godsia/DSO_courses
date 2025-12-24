@@ -5,6 +5,9 @@ ignored:
   - DL3042
   # Allow latest in base image if we're pinning the version
   - DL3007
+  # Allow unpinned curl - version is managed by base image updates
+  # Pinning specific versions can cause build failures when base image updates
+  - DL3008
 
 # Override severity for specific rules
 override:

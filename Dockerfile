@@ -7,9 +7,11 @@ WORKDIR /app
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Install system dependencies (minimal) - pin versions for security
+# Install system dependencies (minimal)
+# Note: curl version is managed by base image updates, pinning may cause build failures
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl=7.88.1-10+deb12u5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
