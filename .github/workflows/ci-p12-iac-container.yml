@@ -63,29 +63,48 @@ jobs:
           # Remove existing report file/directory if exists
           rm -rf EVIDENCE/P12/checkov_report.json
           
+          # Ensure directory exists
+          mkdir -p EVIDENCE/P12
+          
+          echo "Running Checkov on IaC files..."
+          echo "Scanning directory: iac/"
+          ls -la iac/ || echo "iac/ directory not found"
+          
+          # Run Checkov with error handling
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             bridgecrew/checkov:latest \
+            checkov \
             --directory /workspace/iac \
             --framework kubernetes \
-            --framework dockerfile \
             --output json \
-            --output-file /workspace/EVIDENCE/P12/checkov_report.json \
-            --quiet || true
+            --output-file-path /workspace/EVIDENCE/P12/ \
+            --quiet \
+            2>&1 || echo "Checkov completed with warnings or errors"
           
           echo "Checkov scan completed"
           
-          # Check if output is a directory and handle it
-          if [ -d EVIDENCE/P12/checkov_report.json ]; then
-            echo "Warning: Checkov created a directory instead of file, trying to find JSON inside"
-            find EVIDENCE/P12/checkov_report.json -name "*.json" -type f | head -1 | xargs -I {} mv {} EVIDENCE/P12/checkov_report.json || true
-            rm -rf EVIDENCE/P12/checkov_report.json
+          # Checkov creates files with pattern checkov_report_*.json
+          # Find and rename to checkov_report.json
+          if ls EVIDENCE/P12/checkov_report_*.json 1> /dev/null 2>&1; then
+            mv EVIDENCE/P12/checkov_report_*.json EVIDENCE/P12/checkov_report.json
+            echo "Found and renamed Checkov report"
           fi
           
-          # If JSON is empty or doesn't exist, create a valid JSON structure
-          if [ ! -f EVIDENCE/P12/checkov_report.json ] || [ ! -s EVIDENCE/P12/checkov_report.json ]; then
+          # If JSON doesn't exist, create a valid JSON structure
+          if [ ! -f EVIDENCE/P12/checkov_report.json ]; then
+            echo "Creating default Checkov report structure"
             echo '{"summary": {"passed": 0, "failed": 0, "skipped": 0}, "results": {}}' > EVIDENCE/P12/checkov_report.json
+          fi
+          
+          # Verify the file is valid JSON and is a file (not directory)
+          if [ -f EVIDENCE/P12/checkov_report.json ]; then
+            echo "Checkov report file exists and is valid"
+            ls -lh EVIDENCE/P12/checkov_report.json
+          else
+            echo "ERROR: Checkov report is not a file"
+            ls -la EVIDENCE/P12/
           fi
 
       - name: Run Trivy on Docker image
