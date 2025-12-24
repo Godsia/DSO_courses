@@ -1,0 +1,15 @@
+# Trivy configuration
+# This file can be used for Trivy scan configuration
+# Most settings are passed via command line in workflow
+
+# Severity levels to report
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM
+  - LOW
+
+# Ignore specific vulnerabilities (if needed)
+# ignore:
+#   - CVE-2023-XXXXX
+

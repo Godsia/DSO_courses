@@ -1,0 +1,17 @@
+# Hadolint configuration
+# Ignore rules that are not relevant for this project
+ignored:
+  # Allow pip install without --no-cache-dir in some cases
+  - DL3042
+  # Allow latest in base image if we're pinning the version
+  - DL3007
+
+# Override severity for specific rules
+override:
+  error:
+    - DL3008  # Pin versions in apt-get install
+    - DL3009  # Delete apt-get lists after installing
+  warning:
+    - DL3003  # Use WORKDIR instead of cd
+    - DL3006  # Always tag the version of an image
+
