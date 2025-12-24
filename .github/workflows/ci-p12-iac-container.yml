@@ -60,6 +60,9 @@ jobs:
 
       - name: Run Checkov on IaC
         run: |
+          # Remove existing report file/directory if exists
+          rm -rf EVIDENCE/P12/checkov_report.json
+          
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
@@ -70,9 +73,18 @@ jobs:
             --output json \
             --output-file /workspace/EVIDENCE/P12/checkov_report.json \
             --quiet || true
+          
           echo "Checkov scan completed"
-          # If JSON is empty, create a valid JSON structure
-          if [ ! -s EVIDENCE/P12/checkov_report.json ]; then
+          
+          # Check if output is a directory and handle it
+          if [ -d EVIDENCE/P12/checkov_report.json ]; then
+            echo "Warning: Checkov created a directory instead of file, trying to find JSON inside"
+            find EVIDENCE/P12/checkov_report.json -name "*.json" -type f | head -1 | xargs -I {} mv {} EVIDENCE/P12/checkov_report.json || true
+            rm -rf EVIDENCE/P12/checkov_report.json
+          fi
+          
+          # If JSON is empty or doesn't exist, create a valid JSON structure
+          if [ ! -f EVIDENCE/P12/checkov_report.json ] || [ ! -s EVIDENCE/P12/checkov_report.json ]; then
             echo '{"summary": {"passed": 0, "failed": 0, "skipped": 0}, "results": {}}' > EVIDENCE/P12/checkov_report.json
           fi
 
@@ -95,7 +107,7 @@ jobs:
           python3 << 'EOF'
           import json
           import os
-          from datetime import datetime
+          from datetime import datetime, timezone
           
           summary_file = "EVIDENCE/P12/security_summary.md"
           commit_sha = os.environ.get("GITHUB_SHA", "unknown")
@@ -103,71 +115,79 @@ jobs:
           summary = []
           summary.append("# Security Scan Summary (P12)")
           summary.append("")
-          summary.append(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+          summary.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
           summary.append(f"Commit: {commit_sha}")
           summary.append("")
           
+          # Helper function to safely read JSON file
+          def read_json_file(filepath):
+              try:
+                  if not os.path.exists(filepath):
+                      return None
+                  if not os.path.isfile(filepath):
+                      print(f"Warning: {filepath} is not a file (might be a directory)")
+                      return None
+                  with open(filepath, "r") as f:
+                      return json.load(f)
+              except (json.JSONDecodeError, IOError) as e:
+                  print(f"Error reading {filepath}: {e}")
+                  return None
+          
           # Hadolint summary
-          try:
-              with open("EVIDENCE/P12/hadolint_report.json", "r") as f:
-                  hadolint_data = json.load(f)
-              if isinstance(hadolint_data, list):
-                  errors = sum(1 for item in hadolint_data if item.get("level") == "error")
-                  warnings = sum(1 for item in hadolint_data if item.get("level") == "warning")
-                  summary.append("## Hadolint (Dockerfile)")
-                  summary.append(f"- Errors: {errors}")
-                  summary.append(f"- Warnings: {warnings}")
-          except (FileNotFoundError, json.JSONDecodeError):
+          hadolint_data = read_json_file("EVIDENCE/P12/hadolint_report.json")
+          if hadolint_data and isinstance(hadolint_data, list):
+              errors = sum(1 for item in hadolint_data if item.get("level") == "error")
+              warnings = sum(1 for item in hadolint_data if item.get("level") == "warning")
+              summary.append("## Hadolint (Dockerfile)")
+              summary.append(f"- Errors: {errors}")
+              summary.append(f"- Warnings: {warnings}")
+          else:
               summary.append("## Hadolint (Dockerfile)")
               summary.append("- Report not available")
           
           # Checkov summary
-          try:
-              with open("EVIDENCE/P12/checkov_report.json", "r") as f:
-                  checkov_data = json.load(f)
-              if isinstance(checkov_data, dict):
-                  summary_data = checkov_data.get("summary", {})
-                  passed = summary_data.get("passed", 0)
-                  failed = summary_data.get("failed", 0)
-                  skipped = summary_data.get("skipped", 0)
-                  summary.append("")
-                  summary.append("## Checkov (IaC)")
-                  summary.append(f"- Passed: {passed}")
-                  summary.append(f"- Failed: {failed}")
-                  summary.append(f"- Skipped: {skipped}")
-          except (FileNotFoundError, json.JSONDecodeError):
+          checkov_data = read_json_file("EVIDENCE/P12/checkov_report.json")
+          if checkov_data and isinstance(checkov_data, dict):
+              summary_data = checkov_data.get("summary", {})
+              passed = summary_data.get("passed", 0)
+              failed = summary_data.get("failed", 0)
+              skipped = summary_data.get("skipped", 0)
+              summary.append("")
+              summary.append("## Checkov (IaC)")
+              summary.append(f"- Passed: {passed}")
+              summary.append(f"- Failed: {failed}")
+              summary.append(f"- Skipped: {skipped}")
+          else:
               summary.append("")
               summary.append("## Checkov (IaC)")
               summary.append("- Report not available")
           
           # Trivy summary
-          try:
-              with open("EVIDENCE/P12/trivy_report.json", "r") as f:
-                  trivy_data = json.load(f)
-              if isinstance(trivy_data, dict):
-                  results = trivy_data.get("Results", [])
-                  critical = 0
-                  high = 0
-                  medium = 0
-                  low = 0
-                  for result in results:
-                      for vuln in result.get("Vulnerabilities", []):
-                          severity = vuln.get("Severity", "").upper()
-                          if severity == "CRITICAL":
-                              critical += 1
-                          elif severity == "HIGH":
-                              high += 1
-                          elif severity == "MEDIUM":
-                              medium += 1
-                          elif severity == "LOW":
-                              low += 1
-                  summary.append("")
-                  summary.append("## Trivy (Container Image)")
-                  summary.append(f"- Critical: {critical}")
-                  summary.append(f"- High: {high}")
-                  summary.append(f"- Medium: {medium}")
-                  summary.append(f"- Low: {low}")
-          except (FileNotFoundError, json.JSONDecodeError):
+          trivy_data = read_json_file("EVIDENCE/P12/trivy_report.json")
+          if trivy_data and isinstance(trivy_data, dict):
+              results = trivy_data.get("Results", [])
+              critical = 0
+              high = 0
+              medium = 0
+              low = 0
+              for result in results:
+                  for vuln in result.get("Vulnerabilities", []):
+                      severity = vuln.get("Severity", "").upper()
+                      if severity == "CRITICAL":
+                          critical += 1
+                      elif severity == "HIGH":
+                          high += 1
+                      elif severity == "MEDIUM":
+                          medium += 1
+                      elif severity == "LOW":
+                          low += 1
+              summary.append("")
+              summary.append("## Trivy (Container Image)")
+              summary.append(f"- Critical: {critical}")
+              summary.append(f"- High: {high}")
+              summary.append(f"- Medium: {medium}")
+              summary.append(f"- Low: {low}")
+          else:
               summary.append("")
               summary.append("## Trivy (Container Image)")
               summary.append("- Report not available")
